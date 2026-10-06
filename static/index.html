@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskPulse — Distributed Job Queue Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📦</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #090d16;
+      color: #f1f5f9;
+      min-height: 100vh;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+    .glass-input {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: all 0.2s ease;
+    }
+    .glass-input:focus {
+      border-color: #00D2FF;
+      box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.2);
+      outline: none;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #00D2FF 0%, #3a7bd5 50%, #9d4edd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .btn-gradient {
+      background: linear-gradient(135deg, #00D2FF 0%, #0077B6 100%);
+      transition: all 0.25s ease;
+    }
+    .btn-gradient:hover {
+      opacity: 0.92;
+      transform: translateY(-1px);
+      box-shadow: 0 10px 25px rgba(0, 210, 255, 0.3);
+    }
+  </style>
+</head>
+<body class="p-4 md:p-8 flex flex-col justify-between">
+
+  <!-- TOP NAVBAR -->
+  <div class="max-w-6xl mx-auto w-full mb-8">
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 glass-card rounded-2xl px-6 py-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-indigo-600 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/20">
+          📦
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight gradient-text">TaskPulse</h1>
+          <p class="text-xs text-slate-400">Distributed Task Queue & Worker Monitoring</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="refreshStats()" class="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-cyan-400 flex items-center gap-2">
+          <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i> Auto-Sync: 3s
+        </button>
+        <a href="/docs" target="_blank" class="px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300 hover:text-cyan-400 flex items-center gap-2">
+          <i class="fa-solid fa-book"></i> Swagger Docs
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN DASHBOARD CONTENT -->
+  <main class="max-w-6xl mx-auto w-full flex-grow space-y-6">
+
+    <!-- METRICS GRID -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="glass-card rounded-2xl p-5 border border-cyan-500/20">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Queued Jobs</span>
+        <div class="flex items-baseline justify-between mt-2">
+          <p id="stat-queued" class="text-3xl font-black text-cyan-400 mono">0</p>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-500/30">Priority Sorted</span>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl p-5 border border-emerald-500/20">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Completed Tasks</span>
+        <div class="flex items-baseline justify-between mt-2">
+          <p id="stat-completed" class="text-3xl font-black text-emerald-400 mono">0</p>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30">ACK Processed</span>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl p-5 border border-purple-500/20">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Workers</span>
+        <div class="flex items-baseline justify-between mt-2">
+          <p id="stat-workers" class="text-3xl font-black text-purple-400 mono">4</p>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-500/30">Worker Pool</span>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-2xl p-5 border border-rose-500/20">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Dead-Letter Queue</span>
+        <div class="flex items-baseline justify-between mt-2">
+          <p id="stat-dlq" class="text-3xl font-black text-rose-400 mono">0</p>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-rose-950 text-rose-300 border border-rose-500/30">Max Retries</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN GRID: ENQUEUE FORM + RECENT JOBS -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- ENQUEUE FORM -->
+      <div class="glass-card rounded-3xl p-6 lg:col-span-1">
+        <h3 class="text-base font-bold text-slate-200 mb-1 flex items-center gap-2">
+          <i class="fa-solid fa-plus-circle text-cyan-400"></i> Dispatch Async Job
+        </h3>
+        <p class="text-xs text-slate-400 mb-4">Submit a background task to the worker pool.</p>
+
+        <form onsubmit="submitJob(event)" class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Handler Type *</label>
+            <select id="job-type" class="glass-input w-full px-3 py-2.5 rounded-xl text-slate-100 font-medium">
+              <option value="send_email">✉️ send_email (SMTP notification)</option>
+              <option value="http_webhook">🌐 http_webhook (HTTP Dispatch)</option>
+              <option value="generate_report">📊 generate_report (PDF Analytics)</option>
+              <option value="resize_image">🖼️ resize_image (Media Processing)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Priority Level</label>
+            <select id="job-priority" class="glass-input w-full px-3 py-2.5 rounded-xl text-slate-100 font-medium">
+              <option value="HIGH">🔴 HIGH (Immediate / Priority 100)</option>
+              <option value="NORMAL" selected>🟡 NORMAL (Standard / Priority 50)</option>
+              <option value="LOW">🟢 LOW (Background / Priority 10)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Payload JSON (Parameters)</label>
+            <textarea id="job-payload" rows="3" class="glass-input w-full p-2.5 rounded-xl text-slate-100 mono text-[11px]" placeholder='{"recipient": "user@example.com", "template": "welcome"}'></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Delay (Sec)</label>
+              <input type="number" id="job-delay" min="0" value="0" class="glass-input w-full px-3 py-2 rounded-xl text-slate-100 mono">
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-300 mb-1">Max Retries</label>
+              <input type="number" id="job-retries" min="0" max="10" value="3" class="glass-input w-full px-3 py-2 rounded-xl text-slate-100 mono">
+            </div>
+          </div>
+
+          <button type="submit" class="w-full btn-gradient py-3 rounded-xl text-white font-bold text-xs shadow-lg mt-2 flex items-center justify-center gap-2">
+            <span>Enqueue Job</span>
+            <i class="fa-solid fa-paper-plane text-[10px]"></i>
+          </button>
+        </form>
+      </div>
+
+      <!-- RECENT JOBS EXPLORER -->
+      <div class="glass-card rounded-3xl p-6 lg:col-span-2 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-base font-bold text-slate-200">Live Task Stream</h3>
+            <p class="text-xs text-slate-400">Real-time status updates from worker nodes.</p>
+          </div>
+          <span class="text-xs text-slate-500 mono" id="queue-engine-tag">Engine: Redis</span>
+        </div>
+
+        <div class="overflow-x-auto flex-1">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+              <tr>
+                <th class="p-3">Job ID</th>
+                <th class="p-3">Handler</th>
+                <th class="p-3">Priority</th>
+                <th class="p-3">Status</th>
+                <th class="p-3 text-right">Time</th>
+              </tr>
+            </thead>
+            <tbody id="jobs-tbody" class="divide-y divide-slate-800/60 mono">
+              <!-- Rendered rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="max-w-6xl mx-auto w-full mt-12 text-center text-xs text-slate-500 py-4">
+    <p>TaskPulse Distributed Engine · Built with Python, FastAPI, Redis, and Docker · <a href="https://github.com/Manziine/distributed-task-queue" target="_blank" class="text-cyan-400 hover:underline">GitHub Repository</a></p>
+  </footer>
+
+  <script>
+    async function refreshStats() {
+      const icon = document.getElementById('refresh-icon');
+      icon.classList.add('fa-spin');
+
+      try {
+        const [statsRes, jobsRes] = await Promise.all([
+          fetch('/api/stats'),
+          fetch('/api/jobs?limit=20')
+        ]);
+
+        const stats = await statsRes.json();
+        const jobsData = await jobsRes.json();
+
+        document.getElementById('stat-queued').innerText = stats.queued_jobs || 0;
+        document.getElementById('stat-completed').innerText = stats.completed_jobs || 0;
+        document.getElementById('stat-workers').innerText = stats.active_workers || 4;
+        document.getElementById('stat-dlq').innerText = stats.dead_letter_jobs || 0;
+        document.getElementById('queue-engine-tag').innerText = `Engine: ${stats.backend}`;
+
+        renderJobsTable(jobsData.jobs || []);
+      } catch (err) {
+        console.error('Stats sync error:', err);
+      } finally {
+        setTimeout(() => icon.classList.remove('fa-spin'), 600);
+      }
+    }
+
+    function renderJobsTable(jobs) {
+      const tbody = document.getElementById('jobs-tbody');
+      if (jobs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">Queue is idle. Enqueue a job on the left to see live processing!</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = jobs.map(j => {
+        let statusBadge = '';
+        if (j.status === 'COMPLETED') statusBadge = '<span class="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-500/30">COMPLETED</span>';
+        else if (j.status === 'PROCESSING') statusBadge = '<span class="px-2 py-0.5 rounded bg-blue-950 text-cyan-400 border border-cyan-500/30 animate-pulse">PROCESSING</span>';
+        else if (j.status === 'FAILED' || j.status === 'DEAD_LETTER') statusBadge = '<span class="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-500/30">FAILED</span>';
+        else statusBadge = '<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-300">QUEUED</span>';
+
+        return `
+          <tr class="hover:bg-slate-800/30 transition-colors">
+            <td class="p-3 text-cyan-400 font-bold">${j.id.slice(0, 8)}...</td>
+            <td class="p-3 text-slate-200">${j.job_type}</td>
+            <td class="p-3 font-semibold text-[11px]">${j.priority}</td>
+            <td class="p-3 text-[10px]">${statusBadge}</td>
+            <td class="p-3 text-right text-slate-500 text-[10px]">${new Date(j.created_at).toLocaleTimeString()}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function submitJob(e) {
+      e.preventDefault();
+      const job_type = document.getElementById('job-type').value;
+      const priority = document.getElementById('job-priority').value;
+      let payload = {};
+      try {
+        const txt = document.getElementById('job-payload').value.trim();
+        if (txt) payload = JSON.parse(txt);
+      } catch (err) {
+        alert('Invalid JSON payload: ' + err.message);
+        return;
+      }
+      const delay_seconds = parseInt(document.getElementById('job-delay').value) || 0;
+      const max_retries = parseInt(document.getElementById('job-retries').value) || 3;
+
+      try {
+        const res = await fetch('/api/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_type, payload, priority, delay_seconds, max_retries })
+        });
+        if (!res.ok) throw new Error('Enqueue failed');
+        refreshStats();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    refreshStats();
+    setInterval(refreshStats, 3000);
+  </script>
+</body>
+</html>

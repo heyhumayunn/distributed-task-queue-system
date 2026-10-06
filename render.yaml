@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: taskpulse-queue-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: taskpulse-redis
+          property: connectionString
+      - key: NUM_WORKERS
+        value: 4
+      - key: DEBUG
+        value: false
